@@ -67,8 +67,10 @@ button { cursor: pointer; }
 .ticket-meta { color: var(--muted); font-size: .88rem; min-height: 1.4em; }
 .ticket-menus { display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
 .ticket-menus:empty { display: none; }
-.mrow { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dotted var(--line); padding-block: 2px; }
-.mrow span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.mrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px dotted var(--line); padding-block: 2px; }
+.mrow .mn { min-width: 0; overflow-wrap: anywhere; display: flex; align-items: center; gap: 8px; }
+.mthumb { flex: 0 0 auto; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+.mthumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .mrow .p { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mrow.over { color: var(--muted); }
 .mrow.over .p::after { content: attr(data-over); color: var(--stamp); font-size: .78rem; margin-left: 4px; }
@@ -123,11 +125,10 @@ ul.list > li.off .row .ate-btn { opacity: 1; }
 .detail .src { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 .detail .src a { color: var(--muted); }
 .detail .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.photos { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-.photo { position: relative; flex: 0 0 auto; }
-.photo a { display: block; }
-.photo img { display: block; height: 140px; width: auto; max-width: 70vw; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; background: var(--bg); }
-.photo .rm { position: absolute; top: 4px; right: 4px; border: 0; border-radius: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: .75rem; padding: 2px 7px; }
+.viewer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.viewer[hidden] { display: none; }
+.viewer img { max-width: 100%; max-height: 100%; min-width: min(80vw, 360px); border-radius: 10px; object-fit: contain; }
+.viewer button { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); right: 12px; border: 0; border-radius: 999px; background: rgba(255,255,255,.18); color: #fff; font-size: 1.1rem; width: 40px; height: 40px; }
 .icon-btn { border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: .82rem; }
 .icon-btn:hover { color: var(--ink); }
 .icon-btn.danger { color: var(--stamp); }
@@ -326,7 +327,16 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     const ms = menusOf(x).slice().sort((a, b) => (a.p || 1e9) - (b.p || 1e9));
     ms.slice(0, max || ms.length).forEach((m) => {
       const r = el("div", "mrow");
-      r.appendChild(el("span", "", m.n));
+      const mn = el("span", "mn");
+      if (typeof m.img === "string" && /^m\/[a-z0-9-]+\.(webp|png|jpe?g)$/.test(m.img)) {
+        const tb = el("button", "mthumb"); tb.type = "button"; tb.setAttribute("aria-label", m.n + " 사진 크게 보기");
+        const ti = el("img"); ti.src = "photos/" + m.img; ti.alt = ""; ti.loading = "lazy"; ti.onerror = () => { tb.hidden = true; };
+        tb.appendChild(ti);
+        tb.onclick = (e) => { e.stopPropagation(); openViewer("photos/" + m.img, m.n); };
+        mn.appendChild(tb);
+      }
+      mn.appendChild(document.createTextNode(m.n));
+      r.appendChild(mn);
       const p = el("span", "p", typeof m.p === "number" ? won(m.p) : "가격 모름");
       if (typeof m.p === "number" && m.p > budget()) { r.classList.add("over"); p.dataset.over = "+" + won(m.p - budget()); }
       r.appendChild(p);
@@ -417,19 +427,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
 
     if (openId === x.id) {
       const d = el("div", "detail");
-      const photos = Array.isArray(x.photos) ? x.photos.filter((p) => /^[0-9a-f]{32}\.(webp|png|jpe?g|gif)$/.test(p)) : [];
-      if (photos.length) {
-        const pg = el("div", "photos");
-        photos.forEach((pid) => {
-          const ph = el("div", "photo");
-          const a = el("a"); a.href = "photos/" + pid; a.target = "_blank"; a.rel = "noopener";
-          const img = el("img"); img.src = "photos/" + pid; img.alt = x.name + " 메뉴 사진"; img.loading = "lazy";
-          img.onerror = () => { ph.hidden = true; };
-          a.appendChild(img); ph.appendChild(a);
-          pg.appendChild(ph);
-        });
-        d.appendChild(pg);
-      }
+      const boards = Array.isArray(x.photos) ? x.photos.filter((p) => /^[0-9a-f]{32}\.(webp|png|jpe?g|gif)$/.test(p)) : [];
       const box = el("div", "ticket-menus"); box.appendChild(menuRows(x)); d.appendChild(box);
       if (!menusOf(x).length) d.appendChild(el("div", "src", "메뉴 정보가 아직 없어요."));
       if (x.memo) d.appendChild(el("div", "", x.memo));
@@ -443,6 +441,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
       const acts = el("div", "acts");
       const map = el("a", "map-link", "네이버지도 ↗"); map.href = mapUrl(x); map.target = "_blank"; map.rel = "noopener"; acts.appendChild(map);
       if (safeUrl(x.link)) { const lk = el("a", "map-link", (x.linkLabel || "링크") + " ↗"); lk.href = safeUrl(x.link); lk.target = "_blank"; lk.rel = "noopener"; acts.appendChild(lk); }
+      boards.forEach((p, i) => acts.appendChild(btn(boards.length > 1 ? "메뉴판 " + (i + 1) : "메뉴판 보기", "icon-btn", () => openViewer("photos/" + p, x.name + " 메뉴판"))));
       if (x.lastAte) acts.appendChild(btn("다녀온 기록 지우기", "icon-btn", async () => {
         try { await clearAte(x.id); delete ateMap[x.id]; applyAte(); render(); note(x.name + " 기록을 지웠어요."); }
         catch (e) { note("기록을 지우지 못했어요. 다시 해봐요.", true); }
@@ -452,6 +451,15 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     }
     return li;
   }
+  // In-page photo viewer: tap anywhere, ✕ or Esc closes.
+  const viewer = el("div", "viewer"); viewer.hidden = true; viewer.setAttribute("role", "dialog"); viewer.setAttribute("aria-modal", "true");
+  const vImg = el("img"); const vClose = el("button", "", "✕"); vClose.type = "button"; vClose.setAttribute("aria-label", "닫기");
+  viewer.append(vImg, vClose); document.body.appendChild(viewer);
+  let vReturn = null;
+  function openViewer(src, label) { vReturn = document.activeElement; vImg.src = src; vImg.alt = label || ""; viewer.hidden = false; vClose.focus(); }
+  function closeViewer() { viewer.hidden = true; vImg.removeAttribute("src"); if (vReturn && vReturn.focus) vReturn.focus(); }
+  viewer.onclick = closeViewer;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !viewer.hidden) closeViewer(); });
   function btn(label, cls, fn) { const b = el("button", cls, label); b.type = "button"; b.onclick = (e) => { e.stopPropagation(); fn(); }; return b; }
 
   // ---- pick ----

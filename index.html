@@ -335,7 +335,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     ms.slice(0, max || ms.length).forEach((m) => {
       const r = el("div", "mrow");
       const mn = el("span", "mn");
-      if (typeof m.img === "string" && /^m\/[a-z0-9-]+\.(webp|png|jpe?g)$/.test(m.img)) {
+      if (typeof m.img === "string" && /^m\/[a-z0-9-]+\.(webp|png|jpe?g)(\?v=[0-9a-f]+)?$/.test(m.img)) {
         const tb = el("button", "mthumb"); tb.type = "button"; tb.setAttribute("aria-label", m.n + " 사진 크게 보기");
         const ti = el("img"); ti.src = "photos/" + m.img; ti.alt = ""; ti.loading = "lazy"; ti.onerror = () => { tb.hidden = true; };
         tb.appendChild(ti);
@@ -434,7 +434,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
 
     if (openId === x.id) {
       const d = el("div", "detail");
-      const boards = Array.isArray(x.photos) ? x.photos.filter((p) => /^[0-9a-f]{32}\.(webp|png|jpe?g|gif)$/.test(p)) : [];
+      const boards = Array.isArray(x.photos) ? x.photos.filter((p) => /^[0-9a-f]{32}\.(webp|png|jpe?g|gif)(\?v=[0-9a-f]+)?$/.test(p)) : [];
       const box = el("div", "ticket-menus"); box.appendChild(menuRows({ menus: mainOf(x) })); d.appendChild(box);
       if (extraOf(x).length) {
         d.appendChild(el("div", "msub", "여럿이 · 사이드 (식대 계산에서 빠져요)"));

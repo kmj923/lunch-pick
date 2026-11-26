@@ -126,10 +126,13 @@ ul.list > li.off .row .ate-btn { opacity: 1; }
 .detail .src { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 .detail .src a { color: var(--muted); }
 .detail .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.viewer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.viewer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; overscroll-behavior: contain; }
 .viewer[hidden] { display: none; }
-.viewer img { max-width: 100%; max-height: 100%; min-width: min(80vw, 360px); border-radius: 10px; object-fit: contain; }
-.viewer button { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); right: 12px; border: 0; border-radius: 999px; background: rgba(255,255,255,.18); color: #fff; font-size: 1.1rem; width: 40px; height: 40px; }
+.viewer img { max-width: 100%; max-height: 100%; min-width: min(80vw, 360px); border-radius: 10px; object-fit: contain; cursor: zoom-in; }
+.viewer.zoomed { align-items: flex-start; justify-content: flex-start; padding: 0; }
+.viewer.zoomed img { flex: 0 0 auto; max-width: none; max-height: none; margin: auto; border-radius: 0; cursor: zoom-out; }
+.viewer .hint { position: fixed; bottom: max(14px, env(safe-area-inset-bottom, 0px)); left: 0; right: 0; text-align: center; color: rgba(255,255,255,.75); font-size: .8rem; pointer-events: none; }
+.viewer button { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: 12px; border: 0; border-radius: 999px; background: rgba(255,255,255,.18); color: #fff; font-size: 1.1rem; width: 40px; height: 40px; }
 .icon-btn { border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: .82rem; }
 .icon-btn:hover { color: var(--ink); }
 .icon-btn.danger { color: var(--stamp); }
@@ -464,9 +467,26 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   const vImg = el("img"); const vClose = el("button", "", "✕"); vClose.type = "button"; vClose.setAttribute("aria-label", "닫기");
   viewer.append(vImg, vClose); document.body.appendChild(viewer);
   let vReturn = null;
-  function openViewer(src, label) { vReturn = document.activeElement; vImg.src = src; vImg.alt = label || ""; viewer.hidden = false; vClose.focus(); }
-  function closeViewer() { viewer.hidden = true; vImg.removeAttribute("src"); if (vReturn && vReturn.focus) vReturn.focus(); }
+  // Tap the photo to zoom in (scroll/drag to look around), tap again to zoom out. Tap outside or ✕ to close.
+  const vHint = el("div", "hint", "사진을 누르면 확대돼요");
+  viewer.appendChild(vHint);
+  function unzoom() { viewer.classList.remove("zoomed"); vImg.style.width = ""; vHint.textContent = "사진을 누르면 확대돼요"; }
+  function openViewer(src, label) { vReturn = document.activeElement; unzoom(); vImg.src = src; vImg.alt = label || ""; viewer.hidden = false; vClose.focus(); }
+  function closeViewer() { unzoom(); viewer.hidden = true; vImg.removeAttribute("src"); if (vReturn && vReturn.focus) vReturn.focus(); }
   viewer.onclick = closeViewer;
+  vClose.onclick = (e) => { e.stopPropagation(); closeViewer(); };
+  vImg.onclick = (e) => {
+    e.stopPropagation();
+    if (viewer.classList.contains("zoomed")) { unzoom(); return; }
+    const r = vImg.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    // 2.5x the fitted size, but never past what the photo can show sharply (2x its own pixels)
+    const w = Math.max(r.width * 1.5, Math.min(r.width * 2.5, vImg.naturalWidth * 2));
+    viewer.classList.add("zoomed"); vImg.style.width = w + "px"; vHint.textContent = "밀어서 둘러보고, 다시 누르면 원래대로";
+    const h = w * vImg.naturalHeight / vImg.naturalWidth;
+    void viewer.scrollWidth; // force layout so the new size is scrollable right away
+    viewer.scrollLeft = fx * w - innerWidth / 2; viewer.scrollTop = fy * h - innerHeight / 2;
+  };
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !viewer.hidden) closeViewer(); });
   function btn(label, cls, fn) { const b = el("button", cls, label); b.type = "button"; b.onclick = (e) => { e.stopPropagation(); fn(); }; return b; }
 

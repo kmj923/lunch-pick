@@ -242,14 +242,46 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   $("optBudget").value = ls.get("lunch-budget", 10000);
 
   // ---- data ----
-  // Places come from data.json. "여기 갈래" is kept per person in this browser only.
-  const ATE_KEY = "lunch-ate";
-  const ateMap = ls.get(ATE_KEY, {});
+  // Places come from data.json. "여기 갈래" is shared with the team through Firestore (REST),
+  // collection "ate", one doc per place id holding only a server timestamp "t" (enforced by rules).
+  const FS = "https://firestore.googleapis.com/v1/projects/lunch-pick-b58ad/databases/(default)/documents";
+  const FS_KEY = "AIzaSyBaPNKyQR2Ey9NZ7ULOjvXKSFyi40Frhqc";
+  let ateMap = {};
   const applyAte = () => { items.forEach((x) => { x.lastAte = ateMap[x.id] || null; }); };
+  async function loadAte() {
+    try {
+      const r = await fetch(FS + "/ate?pageSize=300&key=" + FS_KEY, { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      const j = await r.json();
+      const m = {};
+      (j.documents || []).forEach((d) => {
+        const id = d.name.split("/").pop();
+        const t = Date.parse(d.fields && d.fields.t && d.fields.t.timestampValue);
+        if (id && t) m[id] = t;
+      });
+      ateMap = m; applyAte(); render();
+    } catch (e) { note("다녀온 기록을 못 불러왔어요. 잠시 후 새로고침해봐요.", true); }
+  }
+  async function setAte(id) {
+    const r = await fetch(FS + ":commit?key=" + FS_KEY, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ writes: [{
+        update: { name: "projects/lunch-pick-b58ad/databases/(default)/documents/ate/" + id, fields: {} },
+        updateMask: { fieldPaths: [] },
+        updateTransforms: [{ fieldPath: "t", setToServerValue: "REQUEST_TIME" }],
+      }] }),
+    });
+    if (!r.ok) throw new Error(r.status);
+  }
+  async function clearAte(id) {
+    const r = await fetch(FS + "/ate/" + id + "?key=" + FS_KEY, { method: "DELETE" });
+    if (!r.ok) throw new Error(r.status);
+  }
   fetch("data.json", { cache: "no-cache" })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then((d) => { items = Array.isArray(d) ? d.filter((x) => x && x.id && x.name) : []; applyAte(); render(); })
+    .then((d) => { items = Array.isArray(d) ? d.filter((x) => x && x.id && x.name) : []; applyAte(); render(); loadAte(); })
     .catch(() => { $("listArea").textContent = ""; note("목록을 불러오지 못했어요. 새로고침해봐요.", true); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && items.length) loadAte(); });
 
   // ---- helpers ----
   const budget = () => Math.max(0, Number($("optBudget").value) || 0);
@@ -404,7 +436,10 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
       const acts = el("div", "acts");
       const map = el("a", "map-link", "네이버지도 ↗"); map.href = mapUrl(x); map.target = "_blank"; map.rel = "noopener"; acts.appendChild(map);
       if (safeUrl(x.link)) { const lk = el("a", "map-link", (x.linkLabel || "링크") + " ↗"); lk.href = safeUrl(x.link); lk.target = "_blank"; lk.rel = "noopener"; acts.appendChild(lk); }
-      if (x.lastAte) acts.appendChild(btn("다녀온 기록 지우기", "icon-btn", () => { delete ateMap[x.id]; ls.set(ATE_KEY, ateMap); applyAte(); render(); }));
+      if (x.lastAte) acts.appendChild(btn("다녀온 기록 지우기", "icon-btn", async () => {
+        try { await clearAte(x.id); delete ateMap[x.id]; applyAte(); render(); note(x.name + " 기록을 지웠어요."); }
+        catch (e) { note("기록을 지우지 못했어요. 다시 해봐요.", true); }
+      }));
       d.appendChild(acts);
       li.appendChild(d);
     }
@@ -448,11 +483,12 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     };
     tick();
   };
-  $("btnGo").onclick = () => {
+  $("btnGo").onclick = async () => {
     if (!current) return;
+    const x = current;
     $("stamp").hidden = false; $("btnGo").hidden = true;
-    ateMap[current.id] = Date.now(); ls.set(ATE_KEY, ateMap); applyAte();
-    note(current.name + " 다녀온 걸로 기록했어요. (이 폰/브라우저에만 저장돼요)");
+    try { await setAte(x.id); ateMap[x.id] = Date.now(); applyAte(); render(); note(x.name + " 다녀온 걸로 기록했어요. 팀 전체에 보여요."); }
+    catch (e) { $("stamp").hidden = true; $("btnGo").hidden = false; note("기록하지 못했어요. 다시 눌러봐요.", true); }
   };
   const setMode = (m) => { if (mode === m) return; mode = m; activeCat = "전체"; activeTag = "전체"; resetPick(); render(); };
   $("modeLunch").onclick = () => setMode("lunch");

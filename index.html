@@ -105,7 +105,11 @@ ul.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction
 ul.list > li { border-top: 1px solid var(--line); }
 ul.list > li:first-child { border-top: 0; }
 ul.list > li.off .row { opacity: .45; }
-.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 11px 14px; align-items: center; cursor: pointer; }
+.row { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 10px; padding: 11px 10px 11px 14px; align-items: center; cursor: pointer; }
+.ate-btn { grid-row: 1 / span 2; grid-column: 3; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 8px; font-size: .78rem; font-weight: 700; padding: 6px 8px; min-width: 3.6em; white-space: nowrap; }
+.ate-btn.ask { border-color: var(--stamp); color: var(--stamp); }
+.ate-btn.done { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+ul.list > li.off .row .ate-btn { opacity: 1; }
 .r-name { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
 .r-meta { grid-column: 1; color: var(--muted); font-size: .83rem; min-width: 0; overflow-wrap: anywhere; }
 .r-price { grid-row: 1 / span 2; grid-column: 2; text-align: right; font-size: .8rem; color: var(--muted); white-space: nowrap; }
@@ -293,7 +297,8 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   const inMode = (x) => mode === "cafe" ? x.cat === "카페" : !["카페", ...NO_PICK].includes(x.cat);
   const inCat = (x) => activeCat === "전체" || x.cat === activeCat;
   const inTag = (x) => activeTag === "전체" || tagsOf(x).includes(activeTag);
-  const isRecent = (x) => $("optRecent").checked && x.lastAte && (Date.now() - x.lastAte < Number($("optDays").value) * DAY);
+  // Calendar days, not hours: with "3일", a Monday visit is back in the pool on Thursday.
+  const isRecent = (x) => $("optRecent").checked && x.lastAte && daysAgo(x.lastAte) < Number($("optDays").value);
   const budgetOk = (x) => !$("optBudgetOnly").checked || !priced(x).length || okMenus(x).length > 0;
   const farOk = (x) => $("optFar").checked || !x.far;
   const pickable = (x) => inMode(x) && inCat(x) && inTag(x) && !isRecent(x) && budgetOk(x) && farOk(x) && !NO_PICK.includes(x.cat) && !x.noPick;
@@ -309,8 +314,9 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   const mapUrl = (x) => "https://map.naver.com/p/search/" + encodeURIComponent(x.name);
   const safeUrl = (u) => typeof u === "string" && /^https:\/\//.test(u) ? u : "";
   function startOfDay(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function daysAgo(t) { return Math.round((startOfDay(Date.now()) - startOfDay(t)) / DAY); }
   const agoText = (t) => {
-    const d = Math.floor((startOfDay(Date.now()) - startOfDay(t)) / DAY);
+    const d = daysAgo(t);
     return d <= 0 ? "오늘 다녀옴" : d === 1 ? "어제 다녀옴" : d + "일 전 다녀옴";
   };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -406,6 +412,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     if (x.lastAte) rest.push(agoText(x.lastAte));
     if (rest.length) m.appendChild(document.createTextNode(rest.join(" · ")));
     row.appendChild(m);
+    row.appendChild(ateBtn(x));
     li.appendChild(row);
 
     if (openId === x.id) {
@@ -483,11 +490,37 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     };
     tick();
   };
+  async function markAte(x) {
+    await setAte(x.id); ateMap[x.id] = Date.now(); applyAte(); render();
+    note(x.name + " 다녀온 걸로 기록했어요. 팀 전체에 보여요.");
+  }
+  // Row button: tap once to arm ("기록?"), tap again to save. Today's record shows ✓오늘; tapping it arms a clear.
+  let armed = null; // "go:<id>" | "clear:<id>"
+  let armTimer = null;
+  function ateBtn(x) {
+    const today = x.lastAte && daysAgo(x.lastAte) === 0;
+    const key = (today ? "clear:" : "go:") + x.id;
+    const label = armed === key ? (today ? "지울까?" : "기록?") : today ? "✓오늘" : "먹음";
+    const b = btn(label, "ate-btn" + (armed === key ? " ask" : today ? " done" : ""), async () => {
+      if (armed !== key) {
+        armed = key; clearTimeout(armTimer);
+        armTimer = setTimeout(() => { armed = null; renderList(); }, 4000);
+        renderList(); return;
+      }
+      armed = null; clearTimeout(armTimer); b.disabled = true;
+      try {
+        if (today) { await clearAte(x.id); delete ateMap[x.id]; applyAte(); render(); note(x.name + " 기록을 지웠어요."); }
+        else await markAte(x);
+      } catch (e) { note("저장하지 못했어요. 다시 해봐요.", true); renderList(); }
+    });
+    b.setAttribute("aria-label", x.name + (today ? " 오늘 기록 지우기" : " 오늘 다녀온 걸로 기록"));
+    return b;
+  }
   $("btnGo").onclick = async () => {
     if (!current) return;
     const x = current;
     $("stamp").hidden = false; $("btnGo").hidden = true;
-    try { await setAte(x.id); ateMap[x.id] = Date.now(); applyAte(); render(); note(x.name + " 다녀온 걸로 기록했어요. 팀 전체에 보여요."); }
+    try { await markAte(x); }
     catch (e) { $("stamp").hidden = true; $("btnGo").hidden = false; note("기록하지 못했어요. 다시 눌러봐요.", true); }
   };
   const setMode = (m) => { if (mode === m) return; mode = m; activeCat = "전체"; activeTag = "전체"; resetPick(); render(); };

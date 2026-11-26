@@ -73,6 +73,7 @@ button { cursor: pointer; }
 .mthumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .mrow .p { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mrow.over { color: var(--muted); }
+.msub { font-size: .78rem; font-weight: 700; color: var(--muted); margin-top: 4px; }
 .mrow.over .p::after { content: attr(data-over); color: var(--stamp); font-size: .78rem; margin-left: 4px; }
 .ticket-stub { width: 130px; border-left: 2px dashed var(--line); padding: 16px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 .btn-pick { width: 100%; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-size: 1.25rem; padding: 14px 6px; line-height: 1; }
@@ -292,7 +293,10 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   const budget = () => Math.max(0, Number($("optBudget").value) || 0);
   const tagsOf = (x) => Array.isArray(x.tags) ? x.tags : [];
   const menusOf = (x) => Array.isArray(x.menus) ? x.menus.filter((m) => m && m.n) : [];
-  const priced = (x) => menusOf(x).filter((m) => typeof m.p === "number" && m.p > 0);
+  // m.x = shared or side dish: listed under "여럿이 · 사이드" and left out of the 식대 check
+  const mainOf = (x) => menusOf(x).filter((m) => !m.x);
+  const extraOf = (x) => menusOf(x).filter((m) => m.x);
+  const priced = (x) => mainOf(x).filter((m) => typeof m.p === "number" && m.p > 0);
   const okMenus = (x) => priced(x).filter((m) => m.p <= budget());
   const minPrice = (x) => { const p = priced(x); return p.length ? Math.min(...p.map((m) => m.p)) : null; };
   const inMode = (x) => mode === "cafe" ? x.cat === "카페" : !["카페", ...NO_PICK].includes(x.cat);
@@ -322,7 +326,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
-  function menuRows(x, max) {
+  function menuRows(x, max, plain) {
     const box = document.createDocumentFragment();
     const ms = menusOf(x).slice().sort((a, b) => (a.p || 1e9) - (b.p || 1e9));
     ms.slice(0, max || ms.length).forEach((m) => {
@@ -338,7 +342,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
       mn.appendChild(document.createTextNode(m.n));
       r.appendChild(mn);
       const p = el("span", "p", typeof m.p === "number" ? won(m.p) : "가격 모름");
-      if (typeof m.p === "number" && m.p > budget()) { r.classList.add("over"); p.dataset.over = "+" + won(m.p - budget()); }
+      if (!plain && typeof m.p === "number" && m.p > budget()) { r.classList.add("over"); p.dataset.over = "+" + won(m.p - budget()); }
       r.appendChild(p);
       box.appendChild(r);
     });
@@ -428,7 +432,11 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     if (openId === x.id) {
       const d = el("div", "detail");
       const boards = Array.isArray(x.photos) ? x.photos.filter((p) => /^[0-9a-f]{32}\.(webp|png|jpe?g|gif)$/.test(p)) : [];
-      const box = el("div", "ticket-menus"); box.appendChild(menuRows(x)); d.appendChild(box);
+      const box = el("div", "ticket-menus"); box.appendChild(menuRows({ menus: mainOf(x) })); d.appendChild(box);
+      if (extraOf(x).length) {
+        d.appendChild(el("div", "msub", "여럿이 · 사이드 (식대 계산에서 빠져요)"));
+        const ex = el("div", "ticket-menus"); ex.appendChild(menuRows({ menus: extraOf(x) }, 0, true)); d.appendChild(ex);
+      }
       if (!menusOf(x).length) d.appendChild(el("div", "src", "메뉴 정보가 아직 없어요."));
       if (x.memo) d.appendChild(el("div", "", x.memo));
       if (x.note) d.appendChild(el("div", "src", x.note));
@@ -471,7 +479,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     const box = $("pickMenus"); box.textContent = "";
     const ok = okMenus(x);
     if (ok.length) box.appendChild(menuRows({ menus: ok }, 4));
-    else if (menusOf(x).length) box.appendChild(menuRows(x, 3));
+    else if (mainOf(x).length) box.appendChild(menuRows({ menus: mainOf(x) }, 3));
     else box.appendChild(el("div", "mrow over", "메뉴 정보 없음"));
     $("pickMap").href = mapUrl(x); $("pickMap").hidden = false;
     if (safeUrl(x.link)) { const lk = el("a", "map-link", (x.linkLabel || "링크") + " ↗"); lk.href = safeUrl(x.link); lk.target = "_blank"; lk.rel = "noopener"; box.appendChild(lk); }

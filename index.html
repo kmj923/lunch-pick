@@ -400,19 +400,20 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
       const e = el("div", "empty"); e.appendChild(el("strong", "", "목록 불러오는 중")); area.appendChild(e); return;
     }
     const q = $("search").value.trim();
-    const shown = items.filter((x) => q ? x.name.includes(q) : inMode(x));
+    // The list is for browsing: category/tag chips narrow it; budget, distance and recent-visit only affect the pick.
+    const shown = items.filter((x) => q ? x.name.includes(q) : inMode(x) && inCat(x) && inTag(x));
     shown.sort((a, b) => (a.far ? 1 : 0) - (b.far ? 1 : 0) || (a.cat || "힣").localeCompare(b.cat || "힣", "ko") || a.name.localeCompare(b.name, "ko"));
     const ul = el("ul", "list");
     shown.forEach((x) => ul.appendChild(itemEl(x)));
     if (!shown.length) { const e = el("div", "empty"); e.appendChild(el("strong", "", "찾는 곳이 없어요")); area.appendChild(e); return; }
     area.appendChild(ul);
+    $("totalCount").textContent = shown.length + "곳";
     const extra = mode === "lunch" ? items.filter((x) => x.cat === "편의점").length : 0;
     if (extra && !q) area.appendChild(el("p", "note", "편의점 " + extra + "곳은 뽑기에서 빠져 있어요. 검색하면 보여요."));
   }
 
   function itemEl(x) {
     const li = el("li");
-    if (!pickable(x)) li.classList.add("off");
     const row = el("div", "row"); row.tabIndex = 0; row.setAttribute("role", "button"); row.setAttribute("aria-expanded", String(openId === x.id));
     const toggle = () => { openId = openId === x.id ? null : x.id; renderList(); };
     row.onclick = toggle; row.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };

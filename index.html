@@ -154,6 +154,11 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
 .form-actions { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
 .btn-save { border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 700; border-radius: 8px; padding: 8px 16px; }
 .btn-cancel { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 8px 14px; }
+.pick-detail { background: var(--surface); border-radius: 12px; padding-top: 14px; }
+.pick-detail[hidden] { display: none; }
+.pick-detail .detail-head { padding: 0 14px 8px; font-weight: 700; font-size: .92rem; }
+.list-toggle { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px 16px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+.list-toggle .count { color: var(--muted); font-weight: 400; }
 .note { font-size: .82rem; color: var(--muted); margin: 0; }
 .note.warn { color: var(--stamp); }
 
@@ -187,7 +192,6 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
       <div class="ticket-name" id="pickName">뭐 먹지?</div>
       <div class="ticket-meta" id="pickMeta">뽑기를 눌러요.</div>
       <div class="ticket-menus" id="pickMenus"></div>
-      <a class="map-link" id="pickMap" href="#" target="_blank" rel="noopener" hidden>네이버지도에서 보기 ↗</a>
     </div>
     <div class="ticket-stub">
       <button class="btn-pick" id="btnPick" type="button">뽑기</button>
@@ -195,6 +199,8 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     </div>
     <span class="stamp" id="stamp" hidden>결정!</span>
   </section>
+
+  <section class="pick-detail" id="pickDetail" hidden aria-label="뽑힌 가게 정보"></section>
 
   <section class="panel" aria-label="뽑기 조건">
     <div class="chips" id="chips"></div>
@@ -217,6 +223,8 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   </section>
 
   <section class="panel">
+    <button type="button" class="list-toggle" id="btnList" aria-expanded="false" aria-controls="listBody"></button>
+    <div class="panel" id="listBody" hidden>
     <div class="list-head">
       <h2>목록 <span class="count" id="totalCount" style="color:var(--muted);font-weight:400"></span></h2>
       <div class="list-tools">
@@ -227,6 +235,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
 
     <div id="listArea">
       <div class="empty"><strong>목록 불러오는 중</strong>잠깐만요.</div>
+    </div>
     </div>
     <p class="note" id="note"></p>
   </section>
@@ -244,6 +253,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   let current = null;
   let openId = null;
   let rolling = false;
+  let listOpen = false;
 
   const $ = (id) => document.getElementById(id);
   const note = (msg, warn) => { $("note").textContent = msg || ""; $("note").className = "note" + (warn ? " warn" : ""); };
@@ -389,12 +399,28 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     if (!current && !rolling) {
       $("pickName").textContent = mode === "cafe" ? "커피 어디?" : "뭐 먹지?";
       $("pickMeta").textContent = !items.length ? "목록 불러오는 중…" : p.length ? "뽑기를 눌러요." : "조건에 맞는 곳이 없어요. 필터를 바꿔봐요.";
-      $("pickMenus").textContent = ""; $("pickMap").hidden = true;
+      $("pickMenus").textContent = "";
     }
+    const browse = items.filter((x) => inMode(x) && inCat(x) && inTag(x)).length;
+    $("btnList").textContent = "";
+    $("btnList").append(listOpen ? "목록 접기" : (mode === "cafe" ? "카페" : "식당") + " 목록 보기", el("span", "count", items.length ? browse + "곳 " + (listOpen ? "▴" : "▾") : ""));
+    $("btnList").setAttribute("aria-expanded", String(listOpen));
+    $("listBody").hidden = !listOpen;
+    renderDetail();
     renderList();
   }
 
+  // Full info of the picked place, right under the ticket.
+  function renderDetail() {
+    const box = $("pickDetail"); box.textContent = "";
+    box.hidden = !current || rolling;
+    if (box.hidden) return;
+    box.appendChild(el("div", "detail-head", "메뉴 전체"));
+    box.appendChild(detailEl(current));
+  }
+
   function renderList() {
+    if (!listOpen) return;
     const area = $("listArea"); area.textContent = "";
     if (!items.length) {
       const e = el("div", "empty"); e.appendChild(el("strong", "", "목록 불러오는 중")); area.appendChild(e); return;
@@ -437,7 +463,10 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     row.appendChild(ateBtn(x));
     li.appendChild(row);
 
-    if (openId === x.id) {
+    if (openId === x.id) li.appendChild(detailEl(x));
+    return li;
+  }
+  function detailEl(x) {
       const d = el("div", "detail");
       const boards = Array.isArray(x.photos) ? x.photos.filter((p) => /^[0-9a-f]{32}\.(webp|png|jpe?g|gif)(\?v=[0-9a-f]+)?$/.test(p)) : [];
       const box = el("div", "ticket-menus"); box.appendChild(menuRows({ menus: mainOf(x) })); d.appendChild(box);
@@ -469,9 +498,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
         catch (e) { note("기록을 지우지 못했어요. 다시 해봐요.", true); }
       }));
       d.appendChild(acts);
-      li.appendChild(d);
-    }
-    return li;
+      return d;
   }
   // In-page photo viewer: tap anywhere, ✕ or Esc closes.
   const viewer = el("div", "viewer"); viewer.hidden = true; viewer.setAttribute("role", "dialog"); viewer.setAttribute("aria-modal", "true");
@@ -508,13 +535,9 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     const meta = [x.cat, ...tagsOf(x).map((t) => "#" + t), x.building, x.far ? "멀어요" : ""].filter(Boolean).join(" · ");
     $("pickMeta").textContent = meta || " ";
     const box = $("pickMenus"); box.textContent = "";
-    const ok = okMenus(x);
-    if (ok.length) box.appendChild(menuRows({ menus: ok }, 4));
-    else if (mainOf(x).length) box.appendChild(menuRows({ menus: mainOf(x) }, 3));
-    else box.appendChild(el("div", "mrow over", "메뉴 정보 없음"));
-    if (x.rec) box.prepend(el("div", "ticket-rec", "추천: " + x.rec));
-    $("pickMap").href = mapUrl(x); $("pickMap").hidden = false;
-    if (safeUrl(x.link)) { const lk = el("a", "map-link", (x.linkLabel || "링크") + " ↗"); lk.href = safeUrl(x.link); lk.target = "_blank"; lk.rel = "noopener"; box.appendChild(lk); }
+    if (x.rec) box.appendChild(el("div", "ticket-rec", "추천: " + x.rec));
+    const ok = okMenus(x).length;
+    box.appendChild(el("div", "ticket-meta", ok ? "식대 안 메뉴 " + ok + "개 · 아래에서 전체 메뉴 봐요" : "아래에서 전체 메뉴 봐요"));
   }
   $("btnPick").onclick = () => {
     const p = pool(); if (!p.length || rolling) return;
@@ -523,7 +546,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     const final = p[Math.floor(Math.random() * p.length)];
     const steps = reduce || p.length === 1 ? 0 : 14;
     let i = 0;
-    $("pickName").classList.add("rolling"); $("pickMenus").textContent = ""; $("pickMap").hidden = true;
+    $("pickName").classList.add("rolling"); $("pickMenus").textContent = "";
     const tick = () => {
       if (i < steps) {
         $("pickName").textContent = p[Math.floor(Math.random() * p.length)].name; $("pickMeta").textContent = "";
@@ -577,6 +600,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   ["optRecent", "optDays", "optBudgetOnly", "optFar"].forEach((id) => { $(id).onchange = render; });
   $("optBudget").oninput = () => { ls.set("lunch-budget", budget()); if (current) showPick(current); render(); };
   $("search").oninput = renderList;
+  $("btnList").onclick = () => { listOpen = !listOpen; render(); };
 
   // ---- boot ----
   render();

@@ -299,7 +299,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
   // ---- helpers ----
   const budget = () => Math.max(0, Number($("optBudget").value) || 0);
   const tagsOf = (x) => Array.isArray(x.tags) ? x.tags : [];
-  const menusOf = (x) => Array.isArray(x.menus) ? x.menus.filter((m) => m && m.n) : [];
+  const menusOf = (x) => Array.isArray(x.menus) ? x.menus.filter((m) => m && m.n && !m.h) : []; // m.h = kept in data, hidden on the page
   // m.x = shared or side dish: listed under "여럿이 · 사이드" and left out of the 식대 check
   const mainOf = (x) => menusOf(x).filter((m) => !m.x);
   const extraOf = (x) => menusOf(x).filter((m) => m.x);

@@ -74,6 +74,10 @@ button { cursor: pointer; }
 .mrow .p { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mrow.over { color: var(--muted); }
 .msub { font-size: .78rem; font-weight: 700; color: var(--muted); margin-top: 4px; }
+.review { background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; font-size: .86rem; display: flex; flex-direction: column; gap: 2px; }
+.review b { color: var(--accent); }
+.review .tip { color: var(--muted); font-size: .82rem; }
+.ticket-rec { font-size: .85rem; color: var(--accent); font-weight: 700; }
 .mrow.over .p::after { content: attr(data-over); color: var(--stamp); font-size: .78rem; margin-left: 4px; }
 .ticket-stub { width: 130px; border-left: 2px dashed var(--line); padding: 16px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 .btn-pick { width: 100%; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-size: 1.25rem; padding: 14px 6px; line-height: 1; }
@@ -441,6 +445,12 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
         const ex = el("div", "ticket-menus"); ex.appendChild(menuRows({ menus: extraOf(x) }, 0, true)); d.appendChild(ex);
       }
       if (!menusOf(x).length) d.appendChild(el("div", "src", "메뉴 정보가 아직 없어요."));
+      if (x.rec || x.tip) {
+        const rv = el("div", "review");
+        if (x.rec) { const r = el("div"); r.appendChild(el("b", "", "추천 ")); r.appendChild(document.createTextNode(x.rec)); rv.appendChild(r); }
+        if (x.tip) rv.appendChild(el("div", "tip", x.tip));
+        d.appendChild(rv);
+      }
       if (x.memo) d.appendChild(el("div", "", x.memo));
       if (x.note) d.appendChild(el("div", "src", x.note));
       const src = []; if (x.priceDate) src.push("가격 확인: " + x.priceDate);
@@ -501,6 +511,7 @@ form.edit textarea { min-height: 6.5em; resize: vertical; }
     if (ok.length) box.appendChild(menuRows({ menus: ok }, 4));
     else if (mainOf(x).length) box.appendChild(menuRows({ menus: mainOf(x) }, 3));
     else box.appendChild(el("div", "mrow over", "메뉴 정보 없음"));
+    if (x.rec) box.prepend(el("div", "ticket-rec", "추천: " + x.rec));
     $("pickMap").href = mapUrl(x); $("pickMap").hidden = false;
     if (safeUrl(x.link)) { const lk = el("a", "map-link", (x.linkLabel || "링크") + " ↗"); lk.href = safeUrl(x.link); lk.target = "_blank"; lk.rel = "noopener"; box.appendChild(lk); }
   }
